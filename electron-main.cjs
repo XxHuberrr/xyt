@@ -19,7 +19,7 @@ const MIME = {
 };
 
 function contentRoot() {
-  return app.isPackaged ? process.resourcesPath : __dirname;
+  return app.getAppPath();
 }
 
 function startLocalServer() {
