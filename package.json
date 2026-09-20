@@ -1,0 +1,49 @@
+{
+  "name": "xy-t",
+  "version": "1.0.0",
+  "description": "xy+t — a browser-based 4D video slice player",
+  "main": "electron-main.cjs",
+  "author": "xy+t contributors; original visual reference @bradleytangonan",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac dmg zip",
+    "dist:win": "electron-builder --win nsis portable",
+    "dist:linux": "electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.xyt.player",
+    "productName": "xy+t",
+    "asar": true,
+    "files": [
+      "index.html",
+      "styles.css",
+      "app.js",
+      "reference.mp4",
+      "electron-main.cjs",
+      "README.md",
+      "LICENSE"
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "target": ["AppImage"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
+  }
+}

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>xy+t · 4D Motion Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <div class="eyebrow">LOCAL MOTION STUDY / 004</div>
+            <h1>四维播放器</h1>
+          </div>
+        </div>
+        <div class="topbar-meta">
+          <div class="signal"><i></i><span>LOCAL SIGNAL</span></div>
+          <div class="mono" id="headerClock">00:00:00</div>
+          <button class="icon-button" id="helpButton" type="button" aria-label="打开使用说明">?</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="sidebar panel">
+          <section class="panel-section intro-section">
+            <div class="section-kicker"><span>01</span> SOURCE</div>
+            <p class="intro-copy">把参考片变成一块可观测的时间材质。所有处理都在浏览器本地完成。</p>
+            <div class="dropzone" id="dropzone" tabindex="0">
+              <input id="fileInput" type="file" accept="video/*" hidden />
+              <div class="drop-icon" aria-hidden="true">↥</div>
+              <div class="drop-title">拖入视频</div>
+              <div class="drop-subtitle">或点击选择 MP4 / MOV / WebM</div>
+              <button class="text-button" id="chooseButton" type="button">选择文件 <span>↗</span></button>
+            </div>
+            <div class="source-row">
+              <div class="source-badge"><span class="dot"></span><span id="sourceName">reference.mp4</span></div>
+              <button class="tiny-button" id="replaceButton" type="button">替换</button>
+            </div>
+          </section>
+
+          <section class="panel-section compact-section">
+            <div class="section-kicker"><span>02</span> PLAYBACK</div>
+            <div class="control-line">
+              <button class="round-button" id="playButton" type="button" aria-label="播放"><span class="play-glyph">▶</span></button>
+              <div class="control-copy"><span id="playLabel">准备播放</span><small id="playHint">SPACE 播放 / 暂停</small></div>
+              <label class="switch-label"><input id="loopToggle" type="checkbox" checked /><span class="switch"></span><span>LOOP</span></label>
+            </div>
+            <div class="slider-row">
+              <label for="volumeSlider">音量</label>
+              <input id="volumeSlider" type="range" min="0" max="1" value="0.78" step="0.01" />
+              <span class="mono slider-value" id="volumeValue">78%</span>
+            </div>
+            <div class="slider-row">
+              <label for="speedSelect">速度</label>
+              <select id="speedSelect" class="select-control">
+                <option value="0.5">0.5×</option>
+                <option value="0.75">0.75×</option>
+                <option value="1" selected>1×</option>
+                <option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option>
+                <option value="2">2×</option>
+              </select>
+            </div>
+          </section>
+
+          <section class="panel-section compact-section">
+            <div class="section-kicker"><span>03</span> TIME VOLUME</div>
+            <div class="mode-tabs" role="tablist" aria-label="检测模式">
+              <button class="mode-tab active" data-mode="all" type="button">ALL</button>
+              <button class="mode-tab" data-mode="stack" type="button">STACK</button>
+              <button class="mode-tab" data-mode="box" type="button">BOX</button>
+              <button class="mode-tab" data-mode="rail" type="button">TIME-Z</button>
+            </div>
+            <div class="slider-row color-row">
+              <label for="colorPicker">色彩</label>
+              <input id="colorPicker" class="color-picker" type="color" value="#8ff8e8" />
+              <span class="mono slider-value" id="colorValue">#8FF8E8</span>
+            </div>
+            <div class="slider-row">
+              <label for="opacitySlider">切片 α</label>
+              <input id="opacitySlider" type="range" min="0" max="1" value="0.72" step="0.01" />
+              <span class="mono slider-value" id="opacityValue">72%</span>
+            </div>
+            <div class="slider-row">
+              <label for="densitySlider">采样帧率</label>
+              <input id="densitySlider" type="range" min="1" max="50" value="20" step="1" />
+              <span class="mono slider-value" id="densityValue">20 FPS</span>
+            </div>
+            <label class="check-row"><input id="overlayToggle" type="checkbox" checked /><span class="fake-check"></span><span>显示时间体</span></label>
+          </section>
+
+          <section class="panel-section detection-section">
+            <div class="section-kicker"><span>04</span> DETECTION</div>
+            <div class="detection-copy">从视频帧中取样亮度与运动差分，生成一份即时检查报告。</div>
+            <button class="primary-button" id="runDetectionButton" type="button"><span class="button-pulse"></span><span id="runButtonLabel">运行检测</span><span class="button-arrow">↗</span></button>
+            <div class="shortcut-note"><span class="mono">R</span> 快速运行 · 约 5 秒</div>
+          </section>
+        </aside>
+
+        <section class="stage-column">
+          <div class="stage-header">
+            <div>
+              <div class="section-kicker"><span>LIVE</span> REFERENCE STAGE</div>
+              <div class="stage-title-row"><h2>视觉采样台</h2><span class="live-pill"><i></i> SYNCED</span></div>
+            </div>
+            <div class="stage-actions"><button id="muteButton" class="ghost-button" type="button">声音 <span id="muteLabel">开</span></button><button id="fullscreenButton" class="ghost-button" type="button">全屏 ↗</button></div>
+          </div>
+
+          <div class="stage" id="stage">
+            <div class="stage-grid-bg"></div>
+            <div class="video-frame" id="videoFrame">
+              <video id="video" playsinline preload="metadata" loop></video>
+              <canvas id="volumeCanvas" aria-label="视频时间切片三维视图"></canvas>
+              <div class="empty-state" id="emptyState">
+                <div class="empty-orbit"><span></span><span></span><span></span></div>
+                <div class="empty-title">等待一段运动</div>
+                <div class="empty-subtitle">拖入参考视频，开始建立你的时间坐标</div>
+              </div>
+              <div class="scan-overlay" id="scanOverlay" aria-hidden="true">
+                <div class="scan-topline"><span>FRAME INTEGRITY</span><span class="mono" id="scanPercent">00%</span></div>
+                <div class="scan-progress"><span id="scanProgressBar"></span></div>
+                <div class="scan-center-label" id="scanCenterLabel">CALIBRATING MOTION</div>
+              </div>
+              <div class="frame-corner corner-tl"></div><div class="frame-corner corner-tr"></div><div class="frame-corner corner-bl"></div><div class="frame-corner corner-br"></div>
+            </div>
+            <div class="stage-readout"><span><i class="readout-dot"></i> TIME VOLUME</span><span class="mono" id="stageTimecode">00:00:00:00</span><span class="readout-spacer"></span><span class="mono" id="stageResolution">— × —</span><span id="stageMode">ALL / XY + Z</span></div>
+          </div>
+
+          <div class="timeline-panel">
+            <div class="timeline-meta"><span class="mono" id="currentTime">00:00</span><div class="timeline-wrap"><input id="timeline" type="range" min="0" max="100" value="0" step="0.01" /><div class="timeline-markers"><span></span><span></span><span></span><span></span><span></span></div></div><span class="mono" id="durationTime">00:00</span></div>
+            <div class="timeline-controls"><div class="transport-group"><button id="backButton" class="transport-button" type="button">↶ <span>10</span></button><button id="timelinePlayButton" class="transport-button main-transport" type="button">▶</button><button id="forwardButton" class="transport-button" type="button"><span>10</span> ↷</button></div><div class="timeline-caption"><span id="timelineStatus">READY TO SAMPLE</span><span class="mono">LOCAL / NO UPLOAD</span></div></div>
+          </div>
+        </section>
+
+        <aside class="inspector panel">
+          <section class="panel-section inspector-section">
+            <div class="section-kicker"><span>INFO</span> SIGNAL PROFILE</div>
+            <div class="profile-title"><span class="profile-orb"></span><div><div class="profile-name" id="profileName">reference.mp4</div><div class="profile-path">LOCAL OBJECT / READY</div></div></div>
+            <div class="info-grid"><div><span>FORMAT</span><strong id="metaFormat">MP4</strong></div><div><span>SIZE</span><strong id="metaSize">— × —</strong></div><div><span>DURATION</span><strong id="metaDuration">—</strong></div><div><span>FPS</span><strong id="metaFps">—</strong></div></div>
+          </section>
+          <section class="panel-section inspector-section report-section">
+            <div class="section-kicker"><span>REPORT</span> DETECTION OUTPUT</div>
+            <div class="report-status" id="reportStatus"><span class="status-ring"></span><div><strong id="reportTitle">尚未运行</strong><small id="reportSubtitle">运行一次检测，查看视频的运动信号</small></div></div>
+            <div class="metrics-grid"><div class="metric"><span>MOTION SCORE</span><strong id="metricMotion">—</strong><small>帧间差分</small></div><div class="metric"><span>AVG INTERVAL</span><strong id="metricInterval">—</strong><small>采样间隔</small></div><div class="metric"><span>BRIGHTNESS</span><strong id="metricBrightness">—</strong><small>灰度区间</small></div><div class="metric"><span>PEAK DELTA</span><strong id="metricPeak">—</strong><small>最大变化</small></div></div>
+            <div class="report-foot"><span class="mono" id="reportFootLeft">IDLE / WAITING</span><span class="mono" id="reportFootRight">—</span></div>
+          </section>
+          <section class="panel-section inspector-section note-section">
+            <div class="section-kicker"><span>NOTE</span> READING THE LAYER</div>
+            <p>每一层 XY 平面来自视频在不同时间的真实帧；沿 Z 轴的距离就是时间。时间体默认保持静止，拖拽画布旋转，切片不会写回原视频。</p>
+            <div class="note-line"><span class="note-key">A</span><span>上传新视频后，所有检测设置会保留。</span></div>
+            <div class="note-line"><span class="note-key">B</span><span>检测期间可随时取消，不会生成重复动画。</span></div>
+          </section>
+          <div class="inspector-footer"><span>xy+t · @bradleytangonan</span><span class="mono">MIT / TIME SLICES</span></div>
+        </aside>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"><span class="toast-dot"></span><span id="toastText">已载入</span></div>
+    <div class="help-modal" id="helpModal" aria-hidden="true"><div class="help-card"><button class="modal-close" id="closeHelp" type="button">×</button><div class="section-kicker"><span>QUICK GUIDE</span> LOCAL WORKFLOW</div><h3>从视频到信号</h3><p>把参考视频拖入左侧区域，播放器会立即读取本地文件。先建立时间切片体，再拖拽画布观察 Z 轴时间结构；点击「运行检测」可看到 5 秒取样动画与真实帧差分指标。</p><div class="help-shortcuts"><div><kbd>Space</kbd><span>播放 / 暂停</span></div><div><kbd>R</kbd><span>运行检测</span></div><div><kbd>←</kbd><span>后退 10 秒</span></div><div><kbd>→</kbd><span>前进 10 秒</span></div></div><button class="primary-button" id="closeHelpCta" type="button">开始使用 <span>↗</span></button></div></div>
+    <canvas id="sampleCanvas" width="128" height="72" hidden></canvas>
+    <script src="app.js"></script>
+  </body>
+</html>
