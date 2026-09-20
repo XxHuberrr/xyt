@@ -31,7 +31,7 @@
   function toast(message) { refs.toastText.textContent = message; refs.toast.classList.add("show"); clearTimeout(state.lastToast); state.lastToast = setTimeout(() => refs.toast.classList.remove("show"), 2800); }
   function clock() { const d = new Date(); refs.headerClock.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map((x) => String(x).padStart(2, "0")).join(":"); }
   function updateLabels() { refs.volumeValue.textContent = `${Math.round(Number(refs.volumeSlider.value) * 100)}%`; refs.opacityValue.textContent = `${Math.round(Number(refs.opacitySlider.value) * 100)}%`; refs.densityValue.textContent = `${Math.round(Number(refs.densitySlider.value))} FPS`; refs.colorValue.textContent = refs.colorPicker.value.toUpperCase(); }
-  function setName(name) { refs.sourceName.textContent = nameOf(name); refs.profileName.textContent = nameOf(name); refs.profileName.title = name; state.sourceExtension = (name.includes(".") ? name.split(".").pop() : "mp4").toUpperCase(); state.isReference = name === "reference.mp4"; document.title = `${nameOf(name)} · 四维播放器`; }
+  function setName(name) { refs.sourceName.textContent = nameOf(name); refs.profileName.textContent = nameOf(name); refs.profileName.title = name; state.sourceExtension = (name.includes(".") ? name.split(".").pop() : "mp4").toUpperCase(); state.isReference = name === "reference.mp4"; document.title = `${nameOf(name)} · xy+t`; }
   function updateMode() { refs.stageMode.textContent = ({ all: "ALL / XY + Z", stack: "STACK / XY SLICES", box: "BOX / VOLUME FRAME", rail: "TIME-Z / RAIL" })[state.mode] || "ALL / XY + Z"; }
   function updateTime() { refs.currentTime.textContent = time(video.currentTime || 0); refs.stageTimecode.textContent = tc(video.currentTime || 0); if (document.activeElement !== refs.timeline) refs.timeline.value = video.currentTime || 0; }
   function updatePlayback() { const playing = !video.paused && !video.ended; refs.playButton.querySelector(".play-glyph").textContent = playing ? "Ⅱ" : "▶"; refs.timelinePlayButton.textContent = playing ? "Ⅱ" : "▶"; refs.playLabel.textContent = playing ? "正在播放" : (video.currentTime > 0 ? "已暂停" : "准备播放"); refs.playButton.setAttribute("aria-label", playing ? "暂停" : "播放"); refs.timelineStatus.textContent = state.volumeBuilding ? "BUILDING TIME VOLUME" : state.detection === "scanning" ? "SCANNING FRAME SIGNAL" : playing ? "PLAYING REFERENCE" : "READY TO SAMPLE"; }
@@ -354,6 +354,16 @@
     volumeCanvas.addEventListener("pointerdown", (e) => { state.drag = { x: e.clientX, y: e.clientY, yaw: state.yaw, pitch: state.pitch }; volumeCanvas.classList.add("dragging"); volumeCanvas.setPointerCapture(e.pointerId); }); volumeCanvas.addEventListener("pointermove", (e) => { if (!state.drag) return; state.yaw = state.drag.yaw + (e.clientX - state.drag.x) * .008; state.pitch = clamp(state.drag.pitch + (e.clientY - state.drag.y) * .008, -1.2, 1.2); }); ["pointerup", "pointercancel"].forEach((n) => volumeCanvas.addEventListener(n, (e) => { state.drag = null; volumeCanvas.classList.remove("dragging"); try { volumeCanvas.releasePointerCapture(e.pointerId); } catch {} })); volumeCanvas.addEventListener("wheel", (e) => { e.preventDefault(); state.distance = clamp(state.distance + e.deltaY * .003, 2.5, 7); }, { passive: false });
     refs.helpButton.addEventListener("click", () => { refs.helpModal.classList.add("open"); refs.helpModal.setAttribute("aria-hidden", "false"); }); [refs.closeHelp, refs.closeHelpCta].forEach((b) => b.addEventListener("click", () => { refs.helpModal.classList.remove("open"); refs.helpModal.setAttribute("aria-hidden", "true"); })); refs.helpModal.addEventListener("click", (e) => { if (e.target === refs.helpModal) refs.closeHelp.click(); }); window.addEventListener("resize", resizeCanvas); document.addEventListener("keydown", (e) => { if (e.target.matches("input, select, textarea")) return; if (e.code === "Space") { e.preventDefault(); togglePlay(); } if (e.key.toLowerCase() === "r") { e.preventDefault(); state.detection === "scanning" ? cancelDetection() : runDetection(); } if (e.key === "ArrowLeft") video.currentTime = clamp(video.currentTime - 10, 0, video.duration || 0); if (e.key === "ArrowRight") video.currentTime = clamp(video.currentTime + 10, 0, video.duration || 0); });
   }
-  function init() { clock(); setInterval(clock, 1000); updateLabels(); video.volume = Number(refs.volumeSlider.value); video.loop = true; if (gl) initGL(); events(); resizeCanvas(); setVideo("reference.mp4", "reference.mp4"); }
+  async function init() {
+    clock(); setInterval(clock, 1000); updateLabels();
+    video.volume = Number(refs.volumeSlider.value); video.loop = true;
+    if (gl) initGL(); events(); resizeCanvas();
+    // A local reference is optional; published packages start ready for upload.
+    const sourceVersion = state.buildId;
+    try {
+      const response = await fetch("reference.mp4", { method: "HEAD" });
+      if (response.ok && state.buildId === sourceVersion) setVideo("reference.mp4", "reference.mp4");
+    } catch { /* Local files can still be selected when no reference is bundled. */ }
+  }
   init();
 })();
