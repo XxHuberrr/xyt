@@ -8,9 +8,22 @@
   const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
   const gl = volumeCanvas.getContext("webgl2", { alpha: false, antialias: true });
   const state = {
-    mode: "all", color: "#8ff8e8", opacity: .72, sliceCount: 48, maxSlices: 64,
+    mode: "all", color: "#ffffff", opacity: .72, sliceCount: 48, maxSlices: 64,
     gpuMaxSlices: 64, sampleFps: 20, firstSampleTime: 0,
+    // Imported media is always resampled into one of these bounded working
+    // resolutions before it reaches the GPU. The source video's native frame
+    // size is never used as a texture dimension.
+    processingPreset: 720, processingWidth: 0, processingHeight: 0,
+    sourceWidth: 0, sourceHeight: 0, processingMemoryMB: 0,
     depth: 2.6, yaw: -.68, pitch: .10, distance: 4.3, autoRotate: false,
+    // The original view was an orbit camera. Keep the orbit controls, but add
+    // a small six degree-of-freedom navigation layer so the time volume can be
+    // explored as a space. Velocities are eased in render() instead of being
+    // changed directly by key events, which keeps keyboard motion smooth even
+    // when the browser dispatches key-repeat at an uneven rate.
+    cameraX: 0, cameraY: 0, cameraZ: 0,
+    cameraVX: 0, cameraVY: 0, cameraVZ: 0,
+    cameraFov: Math.PI / 4, sprintBlend: 0, keys: new Set(), navigationActive: false,
     showVolume: true, showBox: true, volumeReady: false, volumeBuilding: false,
     abort: null, texture: null, aspect: 1, objectUrl: null, loaded: false,
     detection: "idle", detectionTimer: null, sampleTimer: null, samples: [], lastSample: null,
@@ -20,7 +33,7 @@
     sourceExtension: "MP4", isReference: true, buildId: 0,
   };
   const refs = {
-    videoFrame: $("videoFrame"), dropzone: $("dropzone"), fileInput: $("fileInput"), sourceName: $("sourceName"), profileName: $("profileName"), chooseButton: $("chooseButton"), replaceButton: $("replaceButton"), playButton: $("playButton"), playLabel: $("playLabel"), loopToggle: $("loopToggle"), volumeSlider: $("volumeSlider"), volumeValue: $("volumeValue"), speedSelect: $("speedSelect"), colorPicker: $("colorPicker"), colorValue: $("colorValue"), opacitySlider: $("opacitySlider"), opacityValue: $("opacityValue"), densitySlider: $("densitySlider"), densityValue: $("densityValue"), overlayToggle: $("overlayToggle"), runDetectionButton: $("runDetectionButton"), runButtonLabel: $("runButtonLabel"), timeline: $("timeline"), timelinePlayButton: $("timelinePlayButton"), backButton: $("backButton"), forwardButton: $("forwardButton"), currentTime: $("currentTime"), durationTime: $("durationTime"), timelineStatus: $("timelineStatus"), stageTimecode: $("stageTimecode"), stageResolution: $("stageResolution"), stageMode: $("stageMode"), metaDuration: $("metaDuration"), metaFormat: $("metaFormat"), metaSize: $("metaSize"), metaFps: $("metaFps"), emptyState: $("emptyState"), scanOverlay: $("scanOverlay"), scanPercent: $("scanPercent"), scanProgressBar: $("scanProgressBar"), scanCenterLabel: $("scanCenterLabel"), reportStatus: $("reportStatus"), reportTitle: $("reportTitle"), reportSubtitle: $("reportSubtitle"), reportFootLeft: $("reportFootLeft"), reportFootRight: $("reportFootRight"), metricMotion: $("metricMotion"), metricInterval: $("metricInterval"), metricBrightness: $("metricBrightness"), metricPeak: $("metricPeak"), muteButton: $("muteButton"), muteLabel: $("muteLabel"), fullscreenButton: $("fullscreenButton"), toast: $("toast"), toastText: $("toastText"), headerClock: $("headerClock"), helpButton: $("helpButton"), helpModal: $("helpModal"), closeHelp: $("closeHelp"), closeHelpCta: $("closeHelpCta"),
+    videoFrame: $("videoFrame"), dropzone: $("dropzone"), fileInput: $("fileInput"), sourceName: $("sourceName"), profileName: $("profileName"), chooseButton: $("chooseButton"), replaceButton: $("replaceButton"), playButton: $("playButton"), playLabel: $("playLabel"), loopToggle: $("loopToggle"), volumeSlider: $("volumeSlider"), volumeValue: $("volumeValue"), speedSelect: $("speedSelect"), colorPicker: $("colorPicker"), colorValue: $("colorValue"), opacitySlider: $("opacitySlider"), opacityValue: $("opacityValue"), densitySlider: $("densitySlider"), densityValue: $("densityValue"), resolutionSelect: $("resolutionSelect"), resolutionValue: $("resolutionValue"), overlayToggle: $("overlayToggle"), runDetectionButton: $("runDetectionButton"), runButtonLabel: $("runButtonLabel"), timeline: $("timeline"), timelinePlayButton: $("timelinePlayButton"), backButton: $("backButton"), forwardButton: $("forwardButton"), currentTime: $("currentTime"), durationTime: $("durationTime"), timelineStatus: $("timelineStatus"), stageTimecode: $("stageTimecode"), stageResolution: $("stageResolution"), stageMode: $("stageMode"), metaDuration: $("metaDuration"), metaFormat: $("metaFormat"), metaSize: $("metaSize"), metaFps: $("metaFps"), emptyState: $("emptyState"), scanOverlay: $("scanOverlay"), scanPercent: $("scanPercent"), scanProgressBar: $("scanProgressBar"), scanCenterLabel: $("scanCenterLabel"), reportStatus: $("reportStatus"), reportTitle: $("reportTitle"), reportSubtitle: $("reportSubtitle"), reportFootLeft: $("reportFootLeft"), reportFootRight: $("reportFootRight"), metricMotion: $("metricMotion"), metricInterval: $("metricInterval"), metricBrightness: $("metricBrightness"), metricPeak: $("metricPeak"), muteButton: $("muteButton"), muteLabel: $("muteLabel"), fullscreenButton: $("fullscreenButton"), toast: $("toast"), toastText: $("toastText"), headerClock: $("headerClock"), helpButton: $("helpButton"), helpModal: $("helpModal"), closeHelp: $("closeHelp"), closeHelpCta: $("closeHelpCta"),
   };
   const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
   const time = (s) => Number.isFinite(s) ? `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}` : "00:00";
@@ -30,17 +43,44 @@
 
   function toast(message) { refs.toastText.textContent = message; refs.toast.classList.add("show"); clearTimeout(state.lastToast); state.lastToast = setTimeout(() => refs.toast.classList.remove("show"), 2800); }
   function clock() { const d = new Date(); refs.headerClock.textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map((x) => String(x).padStart(2, "0")).join(":"); }
-  function updateLabels() { refs.volumeValue.textContent = `${Math.round(Number(refs.volumeSlider.value) * 100)}%`; refs.opacityValue.textContent = `${Math.round(Number(refs.opacitySlider.value) * 100)}%`; refs.densityValue.textContent = `${Math.round(Number(refs.densitySlider.value))} FPS`; refs.colorValue.textContent = refs.colorPicker.value.toUpperCase(); }
+  function updateLabels() { refs.volumeValue.textContent = `${Math.round(Number(refs.volumeSlider.value) * 100)}%`; refs.opacityValue.textContent = `${Math.round(Number(refs.opacitySlider.value) * 100)}%`; refs.densityValue.textContent = `${Math.round(Number(refs.densitySlider.value))} FPS`; refs.colorValue.textContent = refs.colorPicker.value.toUpperCase(); if (refs.resolutionValue) refs.resolutionValue.textContent = `${state.processingPreset}p`; if (refs.resolutionSelect && refs.resolutionSelect.value !== String(state.processingPreset)) refs.resolutionSelect.value = String(state.processingPreset); }
   function setName(name) { refs.sourceName.textContent = nameOf(name); refs.profileName.textContent = nameOf(name); refs.profileName.title = name; state.sourceExtension = (name.includes(".") ? name.split(".").pop() : "mp4").toUpperCase(); state.isReference = name === "reference.mp4"; document.title = `${nameOf(name)} · xy+t`; }
   function updateMode() { refs.stageMode.textContent = ({ all: "ALL / XY + Z", stack: "STACK / XY SLICES", box: "BOX / VOLUME FRAME", rail: "TIME-Z / RAIL" })[state.mode] || "ALL / XY + Z"; }
   function updateTime() { refs.currentTime.textContent = time(video.currentTime || 0); refs.stageTimecode.textContent = tc(video.currentTime || 0); if (document.activeElement !== refs.timeline) refs.timeline.value = video.currentTime || 0; }
   function updatePlayback() { const playing = !video.paused && !video.ended; refs.playButton.querySelector(".play-glyph").textContent = playing ? "Ⅱ" : "▶"; refs.timelinePlayButton.textContent = playing ? "Ⅱ" : "▶"; refs.playLabel.textContent = playing ? "正在播放" : (video.currentTime > 0 ? "已暂停" : "准备播放"); refs.playButton.setAttribute("aria-label", playing ? "暂停" : "播放"); refs.timelineStatus.textContent = state.volumeBuilding ? "BUILDING TIME VOLUME" : state.detection === "scanning" ? "SCANNING FRAME SIGNAL" : playing ? "PLAYING REFERENCE" : "READY TO SAMPLE"; }
   async function togglePlay() { if (!state.loaded) { toast("请先载入一段视频"); return; } if (video.paused) { try { await video.play(); } catch { toast("浏览器阻止了播放，请再次点击"); } } else video.pause(); }
+  // Fit the source into a bounded 720p/1080p working canvas while preserving
+  // aspect ratio. Small clips are never upscaled; this keeps the import path
+  // predictable and avoids pushing the original (possibly 4K) frame size into
+  // the texture array.
+  function fitProcessingSize(sourceW, sourceH, preset = state.processingPreset) {
+    const target = Number(preset) >= 1080 ? { width: 1920, height: 1080 } : { width: 1280, height: 720 };
+    const sw = Math.max(1, Number(sourceW) || target.width);
+    const sh = Math.max(1, Number(sourceH) || target.height);
+    const scale = Math.min(1, target.width / sw, target.height / sh);
+    // Even dimensions are friendlier to browser video decoders and WebGL
+    // upload paths. Keep a minimum of two pixels for unusual tiny clips.
+    return { width: Math.max(2, Math.floor(sw * scale / 2) * 2), height: Math.max(2, Math.floor(sh * scale / 2) * 2) };
+  }
+  function updateProcessingSize(sourceW = video.videoWidth, sourceH = video.videoHeight) {
+    const size = fitProcessingSize(sourceW, sourceH);
+    state.sourceWidth = Number(sourceW) || 0;
+    state.sourceHeight = Number(sourceH) || 0;
+    state.processingWidth = size.width;
+    state.processingHeight = size.height;
+    if (refs.resolutionSelect && refs.resolutionSelect.value !== String(state.processingPreset)) refs.resolutionSelect.value = String(state.processingPreset);
+    if (refs.resolutionValue) {
+      refs.resolutionValue.textContent = `${state.processingPreset}p`;
+      refs.resolutionValue.title = `处理画布 ${size.width} × ${size.height}（源视频不会直接写入时间体）`;
+    }
+    return size;
+  }
   function metadata() {
     const w = video.videoWidth || 0;
     const h = video.videoHeight || 0;
     state.aspect = w && h ? w / h : 1;
-    refs.stageResolution.textContent = w && h ? `${w} × ${h}` : "— × —";
+    const processing = updateProcessingSize(w, h);
+    refs.stageResolution.textContent = w && h ? `${processing.width} × ${processing.height}` : "— × —";
     refs.metaSize.textContent = refs.stageResolution.textContent;
     refs.durationTime.textContent = time(video.duration);
     refs.metaDuration.textContent = time(video.duration);
@@ -69,15 +109,19 @@
   function rotX(r) { const c = Math.cos(r), s = Math.sin(r); return new Float32Array([1,0,0,0,0,c,s,0,0,-s,c,0,0,0,0,1]); }
   function rotY(r) { const c = Math.cos(r), s = Math.sin(r); return new Float32Array([c,0,-s,0,0,1,0,0,s,0,c,0,0,0,0,1]); }
   function translate(z) { return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,z,1]); }
+  function translateXYZ(x, y, z) { return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1]); }
 
   function initGL() {
     if (!gl) { refs.videoFrame.classList.remove("webgl-ready"); toast("当前浏览器不支持 WebGL2，无法显示时间切片体"); return; }
-    const sliceV = `#version 300 es\nlayout(location=0) in vec2 aPos; layout(location=1) in vec2 aUV; uniform mat4 uMvp; uniform float uAspect,uDepth; uniform int uLayers,uTextureLayers; out vec2 vUV; flat out int vLayer; void main(){int k=gl_InstanceID;float q=float(k)/max(1.0,float(uLayers-1));float z=(q-.5)*uDepth;gl_Position=uMvp*vec4(aPos*vec2(uAspect,1.),z,1.);vUV=aUV;vLayer=int(q*float(uTextureLayers-1)+.5);}`;
-    const sliceF = `#version 300 es\nprecision highp float;precision highp sampler2DArray;uniform sampler2DArray uFrames;uniform vec3 uTint;uniform float uOpacity;in vec2 vUV;flat in int vLayer;out vec4 outColor;void main(){vec4 f=texture(uFrames,vec3(vUV,float(vLayer)));float edge=min(min(vUV.x,1.-vUV.x),min(vUV.y,1.-vUV.y));float feather=.46+.54*smoothstep(0.,.085,edge);float luminance=dot(f.rgb,vec3(.2126,.7152,.0722));float a=uOpacity*(.06+.28*luminance)*feather;vec3 soft=mix(f.rgb,uTint,.16);outColor=vec4(soft,a);}`;
+    const sliceV = `#version 300 es\nlayout(location=0) in vec2 aPos; layout(location=1) in vec2 aUV; uniform mat4 uMvp; uniform float uAspect,uDepth; uniform int uLayers,uTextureLayers; out vec2 vUV; flat out int vLayer; out float vQ; void main(){int k=gl_InstanceID;float q=float(k)/max(1.0,float(uLayers-1));float z=(q-.5)*uDepth;gl_Position=uMvp*vec4(aPos*vec2(uAspect,1.),z,1.);vUV=aUV;vLayer=int(q*float(uTextureLayers-1)+.5);vQ=q;}`;
+    // The depth-dependent lift is deliberately restrained: it gives the stack
+    // a soft, luminous core and a little apparent thickness from the side,
+    // without turning every temporal slice into a dark opaque card.
+    const sliceF = `#version 300 es\nprecision highp float;precision highp sampler2DArray;uniform sampler2DArray uFrames;uniform vec3 uTint;uniform float uOpacity,uSpaceLight;in vec2 vUV;flat in int vLayer;in float vQ;out vec4 outColor;void main(){vec4 f=texture(uFrames,vec3(vUV,float(vLayer)));float edge=min(min(vUV.x,1.-vUV.x),min(vUV.y,1.-vUV.y));float feather=.46+.54*smoothstep(0.,.085,edge);float luminance=dot(f.rgb,vec3(.2126,.7152,.0722));float core=exp(-pow((vQ-.5)*2.45,2.));float rim=smoothstep(.02,.35,min(vQ,1.-vQ));float a=uOpacity*(.06+.28*luminance)*feather;float light=(.025+.09*core+.025*rim)*uSpaceLight;vec3 soft=mix(f.rgb,uTint,.16);soft=mix(soft,vec3(.92,.97,1.),clamp(light,0.,.18));outColor=vec4(soft,a+light*.32);}`;
     const currentV = `#version 300 es\nlayout(location=0) in vec2 aPos; layout(location=1) in vec2 aUV; uniform mat4 uMvp; uniform float uAspect,uCurrentZ; out vec2 vUV; void main(){gl_Position=uMvp*vec4(aPos*vec2(uAspect,1.),uCurrentZ,1.);vUV=aUV;}`;
     const currentF = `#version 300 es\nprecision highp float;precision highp sampler2DArray;uniform sampler2DArray uFrames;uniform vec3 uTint;uniform int uLayer;in vec2 vUV;out vec4 outColor;void main(){vec4 f=texture(uFrames,vec3(vUV,float(uLayer)));float edge=min(min(vUV.x,1.-vUV.x),min(vUV.y,1.-vUV.y));float feather=smoothstep(0.,.075,edge);vec3 bright=min(vec3(1.),f.rgb*1.16+vec3(.018));outColor=vec4(mix(bright,uTint,.08),feather*.42);}`;
     const lineV = `#version 300 es\nlayout(location=0) in vec3 aPos;uniform mat4 uMvp;void main(){gl_Position=uMvp*vec4(aPos,1.);}`;
-    const lineF = `#version 300 es\nprecision highp float;uniform vec4 uColor;out vec4 outColor;void main(){outColor=uColor;}`;
+    const lineF = `#version 300 es\nprecision highp float;uniform vec4 uColor;uniform float uGlow;out vec4 outColor;void main(){float pulse=.82+.18*uGlow;outColor=vec4(min(vec3(1.),uColor.rgb*(.92+.08*uGlow)),uColor.a*pulse);}`;
     try { state.programs = { slices: program(sliceV, sliceF), current: program(currentV, currentF), lines: program(lineV, lineF) }; } catch (e) { console.error(e); toast("时间切片着色器初始化失败"); return; }
     state.gpuMaxSlices = Math.max(2, gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) || state.maxSlices); state.maxSlices = Math.min(state.maxSlices, state.gpuMaxSlices); state.sliceCount = Math.min(state.sliceCount, state.maxSlices); refs.densitySlider.min = "1"; refs.densitySlider.max = "50"; refs.densitySlider.value = String(state.sampleFps); updateLabels(); state.quadBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, state.quadBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,0,0,1,-1,1,0,1,1,1,1,-1,-1,0,0,1,1,1,1,-1,1,0,1]), gl.STATIC_DRAW); state.boxBuffer = gl.createBuffer(); state.boxIndexBuffer = gl.createBuffer(); state.timelineBuffer = gl.createBuffer(); boxGeometry(); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); render();
   }
@@ -90,6 +134,8 @@
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
     gl.uniform4f(gl.getUniformLocation(p, "uColor"), color[0], color[1], color[2], color[3]);
+    const glowLoc = gl.getUniformLocation(p, "uGlow");
+    if (glowLoc) gl.uniform1f(glowLoc, 1 + state.sprintBlend * .8);
     gl.drawArrays(mode, 0, data.length / 3);
   }
 
@@ -102,6 +148,8 @@
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.boxIndexBuffer);
     gl.uniform4f(gl.getUniformLocation(p, "uColor"), tint[0], tint[1], tint[2], .78);
+    const glowLoc = gl.getUniformLocation(p, "uGlow");
+    if (glowLoc) gl.uniform1f(glowLoc, 1 + state.sprintBlend * .8);
     gl.disable(gl.BLEND);
     gl.drawElements(gl.LINES, 16, gl.UNSIGNED_SHORT, 0);
     gl.enable(gl.BLEND);
@@ -147,6 +195,21 @@
     for (let j = 1; j < 4; j++) activeData.push(...active[j], ...active[j + 1]);
     drawSegments(p, activeData, [.96, 1, .84, .98]);
 
+    // A few very low-alpha diagonal shafts suggest light passing through the
+    // temporal volume. They are generated from a deterministic phase rather
+    // than per-slice geometry, so the extra spatial cue costs only 12 vertices.
+    const shafts = [];
+    const phase = performance.now() * .00012;
+    for (let i = 0; i < 6; i++) {
+      const a = phase + i * Math.PI / 3;
+      const x0 = Math.cos(a) * edgeW * 1.18;
+      const y0 = Math.sin(a * 1.31) * edgeH * 1.12;
+      const x1 = Math.cos(a + .34) * edgeW * .72;
+      const y1 = Math.sin(a * 1.31 + .6) * edgeH * .72;
+      shafts.push(x0, y0, -d * .96, x1, y1, d * .96);
+    }
+    drawSegments(p, shafts, [Math.min(1, tint[0] * .85 + .15), Math.min(1, tint[1] * .85 + .15), Math.min(1, tint[2] * .85 + .15), .055]);
+
     // The side rails and active perimeter carry the temporal cue. Avoid an
     // extra external bottom rail, which reads as two unrelated lines below
     // the volume when the camera is rotated.
@@ -157,13 +220,55 @@
       const span = Math.max(.001, video.duration - start);
       return clamp(Math.round(((video.currentTime - start) / span) * (state.maxSlices - 1)), 0, state.maxSlices - 1);
     }
+    function updateCamera(dt) {
+      // WASD moves in the camera's horizontal plane. Vertical movement is
+      // intentionally explicit (Space/Ctrl) so it remains predictable while
+      // looking up or down. Shift changes the target speed and FOV; both are
+      // eased below to avoid a jarring visual snap.
+      const keys = state.keys;
+      const forward = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0);
+      const strafe = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
+      const rise = (keys.has("Space") ? 1 : 0) - ((keys.has("ControlLeft") || keys.has("ControlRight")) ? 1 : 0);
+      const moving = forward !== 0 || strafe !== 0 || rise !== 0;
+      const sprinting = moving && (keys.has("ShiftLeft") || keys.has("ShiftRight"));
+      const speed = sprinting ? 4.8 : 1.65;
+      const len = Math.hypot(strafe, forward) || 1;
+      const f = forward / len;
+      const s = strafe / len;
+      // Camera yaw is also the orbit yaw used by the pointer drag. This keeps
+      // keyboard movement aligned with the direction the volume is facing.
+      const fx = Math.sin(state.yaw), fz = -Math.cos(state.yaw);
+      const rx = Math.cos(state.yaw), rz = Math.sin(state.yaw);
+      const tx = (rx * s + fx * f) * speed;
+      const tz = (rz * s + fz * f) * speed;
+      const ty = rise * speed;
+      const response = 1 - Math.exp(-Math.min(120, dt) * .014);
+      state.cameraVX += (tx - state.cameraVX) * response;
+      state.cameraVY += (ty - state.cameraVY) * response;
+      state.cameraVZ += (tz - state.cameraVZ) * response;
+      const seconds = Math.min(0.08, dt / 1000);
+      state.cameraX = clamp(state.cameraX + state.cameraVX * seconds, -8, 8);
+      state.cameraY = clamp(state.cameraY + state.cameraVY * seconds, -6, 6);
+      // Keep the camera in front of the volume. The far bound is generous so
+      // W/S still feels like free movement, while avoiding near-plane clipping
+      // through the stack when holding W for a long time.
+      state.cameraZ = clamp(state.cameraZ + state.cameraVZ * seconds, -state.distance + 1.25, 12);
+      const targetBlend = sprinting ? 1 : 0;
+      const blendResponse = 1 - Math.exp(-Math.min(120, dt) * .010);
+      state.sprintBlend += (targetBlend - state.sprintBlend) * blendResponse;
+      const targetFov = Math.PI / 4 + state.sprintBlend * (Math.PI / 3.15 - Math.PI / 4);
+      state.cameraFov += (targetFov - state.cameraFov) * (1 - Math.exp(-Math.min(120, dt) * .012));
+    }
     function render(now = performance.now()) {
       if (!gl || !state.programs) return;
       const dt = Math.min(80, now - state.lastRender);
       state.lastRender = now;
       if (state.autoRotate && !state.drag) state.yaw += dt * .00022;
+      updateCamera(dt);
       resizeCanvas();
-      const mvp = matrixMultiply(perspective(Math.PI / 4, volumeCanvas.width / Math.max(1, volumeCanvas.height), .1, 100), matrixMultiply(translate(-state.distance), matrixMultiply(rotY(state.yaw), rotX(state.pitch))));
+      const viewTranslation = translateXYZ(-state.cameraX, -state.cameraY, -state.distance - state.cameraZ);
+      const viewRotation = matrixMultiply(rotY(state.yaw), rotX(state.pitch));
+      const mvp = matrixMultiply(perspective(state.cameraFov, volumeCanvas.width / Math.max(1, volumeCanvas.height), .1, 100), matrixMultiply(viewTranslation, viewRotation));
       gl.clearColor(.025, .035, .05, 1);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       const tint = rgb(state.color);
@@ -182,6 +287,7 @@
         gl.uniform1i(gl.getUniformLocation(p, "uLayers"), state.sliceCount);
         gl.uniform1i(gl.getUniformLocation(p, "uTextureLayers"), state.maxSlices);
         gl.uniform3fv(gl.getUniformLocation(p, "uTint"), tint);
+        gl.uniform1f(gl.getUniformLocation(p, "uSpaceLight"), 1 + state.sprintBlend * .65);
         // Keep the stack readable as slice count changes; the selected frame
         // below is a bright, feathered overlay so it cannot hide foreground slices.
         gl.uniform1f(gl.getUniformLocation(p, "uOpacity"), state.opacity / Math.max(1, Math.sqrt(state.sliceCount / 4)));
@@ -257,22 +363,36 @@
     state.maxSlices = layers;
     state.sliceCount = layers;
 
-    // Keep high sample rates usable by bounding the RGBA array texture. At the
-    // default 12–20fps the source can stay at 720px; pushing toward 50fps
-    // trades some spatial resolution for temporal density instead of failing
-    // allocation on the GPU.
+    // Keep high sample rates usable by bounding the RGBA array texture. The
+    // selected 720p/1080p preset is only a ceiling: temporal density and GPU
+    // memory can lower the effective canvas dimensions, never raise them to
+    // the source video's native size. This is the key import performance guard.
     const sourceH = video.videoHeight || 512;
     const sourceW = video.videoWidth || 512;
-    const textureBudget = 512 * 1024 * 1024;
-    const budgetDimension = Math.floor(Math.sqrt(textureBudget / (4 * layers)));
-    const maxDimension = Math.min(720, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 720, Math.max(256, budgetDimension));
-    const scale = Math.min(1, maxDimension / Math.max(sourceW, sourceH));
-    const w = Math.max(1, Math.round(sourceW * scale));
-    const h = Math.max(1, Math.round(sourceH * scale));
+    const requested = updateProcessingSize(sourceW, sourceH);
+    const textureBudget = 384 * 1024 * 1024;
+    const budgetPixels = Math.max(2 * 2, Math.floor(textureBudget / (4 * layers)));
+    const budgetScale = Math.min(1, Math.sqrt(budgetPixels / Math.max(1, requested.width * requested.height)));
+    const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096;
+    const hardwareScale = Math.min(1, maxTextureSize / Math.max(requested.width, requested.height));
+    const scale = Math.min(1, budgetScale, hardwareScale);
+    const w = Math.max(2, Math.floor(requested.width * scale / 2) * 2);
+    const h = Math.max(2, Math.floor(requested.height * scale / 2) * 2);
+    state.processingWidth = w;
+    state.processingHeight = h;
+    state.processingMemoryMB = (w * h * layers * 4) / (1024 * 1024);
+    if (refs.resolutionValue) {
+      refs.resolutionValue.textContent = `${state.processingPreset}p`;
+      refs.resolutionValue.title = `处理画布 ${w} × ${h} · 预计显存 ${state.processingMemoryMB.toFixed(0)} MB`;
+    }
+    refs.stageResolution.textContent = `${w} × ${h}`;
     const c = document.createElement("canvas");
     c.width = w;
     c.height = h;
-    const cctx = c.getContext("2d", { willReadFrequently: true });
+    // This canvas is the only frame surface uploaded to WebGL. Keep it
+    // decoupled from the hidden source video and ask the browser for a
+    // compositing-friendly context; the tiny probe reads below are infrequent.
+    const cctx = c.getContext("2d", { alpha: false, desynchronized: true });
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, tex);
     gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, w, h, layers);
@@ -316,6 +436,9 @@
         await seek(t);
         cctx.drawImage(video, 0, 0, w, h);
         gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i, w, h, 1, gl.RGBA, gl.UNSIGNED_BYTE, c);
+        // Seeking can resolve synchronously for already decoded frames. Yield
+        // periodically so a dense import cannot monopolize the main thread.
+        if ((i & 7) === 7) await new Promise((resolve) => requestAnimationFrame(resolve));
         const pct = Math.round((i + 1) / layers * 100);
         refs.scanPercent.textContent = `${String(pct).padStart(2, "0")}%`;
         refs.scanProgressBar.style.width = `${pct}%`;
@@ -349,13 +472,30 @@
 
   function events() {
     refs.chooseButton.addEventListener("click", (e) => { e.stopPropagation(); refs.fileInput.click(); }); refs.replaceButton.addEventListener("click", () => refs.fileInput.click()); refs.dropzone.addEventListener("click", (e) => { if (!e.target.closest("button")) refs.fileInput.click(); }); refs.dropzone.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); refs.fileInput.click(); } }); refs.fileInput.addEventListener("change", (e) => { handleFile(e.target.files[0]); e.target.value = ""; }); ["dragenter", "dragover"].forEach((n) => refs.dropzone.addEventListener(n, (e) => { e.preventDefault(); refs.dropzone.classList.add("dragover"); })); ["dragleave", "drop"].forEach((n) => refs.dropzone.addEventListener(n, (e) => { e.preventDefault(); refs.dropzone.classList.remove("dragover"); })); refs.dropzone.addEventListener("drop", (e) => handleFile(e.dataTransfer.files[0]));
-    refs.playButton.addEventListener("click", togglePlay); refs.timelinePlayButton.addEventListener("click", togglePlay); refs.loopToggle.addEventListener("change", () => { video.loop = refs.loopToggle.checked; }); refs.volumeSlider.addEventListener("input", () => { video.volume = Number(refs.volumeSlider.value); updateLabels(); }); refs.speedSelect.addEventListener("change", () => { video.playbackRate = Number(refs.speedSelect.value); }); refs.colorPicker.addEventListener("input", () => { state.color = refs.colorPicker.value; updateLabels(); }); refs.opacitySlider.addEventListener("input", () => { state.opacity = Number(refs.opacitySlider.value); updateLabels(); }); refs.densitySlider.addEventListener("input", () => { state.sampleFps = clamp(Math.round(Number(refs.densitySlider.value)), 1, 50); updateLabels(); }); refs.densitySlider.addEventListener("change", () => { if (state.loaded) buildVolume(); }); refs.overlayToggle.addEventListener("change", () => { state.showVolume = refs.overlayToggle.checked; });
+    refs.playButton.addEventListener("click", togglePlay); refs.timelinePlayButton.addEventListener("click", togglePlay); refs.loopToggle.addEventListener("change", () => { video.loop = refs.loopToggle.checked; }); refs.volumeSlider.addEventListener("input", () => { video.volume = Number(refs.volumeSlider.value); updateLabels(); }); refs.speedSelect.addEventListener("change", () => { video.playbackRate = Number(refs.speedSelect.value); }); refs.colorPicker.addEventListener("input", () => { state.color = refs.colorPicker.value; updateLabels(); }); refs.opacitySlider.addEventListener("input", () => { state.opacity = Number(refs.opacitySlider.value); updateLabels(); }); refs.densitySlider.addEventListener("input", () => { state.sampleFps = clamp(Math.round(Number(refs.densitySlider.value)), 1, 50); updateLabels(); }); refs.densitySlider.addEventListener("change", () => { if (state.loaded) buildVolume(); }); if (refs.resolutionSelect) refs.resolutionSelect.addEventListener("change", () => { state.processingPreset = Number(refs.resolutionSelect.value) >= 1080 ? 1080 : 720; updateProcessingSize(); updateLabels(); if (state.loaded) { toast(`将视频重采样为 ${state.processingPreset}p，请稍候`); buildVolume(); } }); refs.overlayToggle.addEventListener("change", () => { state.showVolume = refs.overlayToggle.checked; });
     document.querySelectorAll(".mode-tab").forEach((tab) => tab.addEventListener("click", () => { document.querySelectorAll(".mode-tab").forEach((x) => x.classList.remove("active")); tab.classList.add("active"); state.mode = tab.dataset.mode; state.showVolume = ["all", "stack", "rail"].includes(state.mode); state.showBox = ["all", "box", "rail"].includes(state.mode); refs.overlayToggle.checked = state.showVolume; updateMode(); })); refs.timeline.addEventListener("input", () => { video.currentTime = Number(refs.timeline.value); updateTime(); }); refs.backButton.addEventListener("click", () => { video.currentTime = clamp(video.currentTime - 10, 0, video.duration || 0); }); refs.forwardButton.addEventListener("click", () => { video.currentTime = clamp(video.currentTime + 10, 0, video.duration || 0); }); refs.runDetectionButton.addEventListener("click", () => state.detection === "scanning" ? cancelDetection() : runDetection()); video.addEventListener("loadedmetadata", metadata); video.addEventListener("timeupdate", updateTime); video.addEventListener("play", updatePlayback); video.addEventListener("pause", updatePlayback); refs.muteButton.addEventListener("click", () => { video.muted = !video.muted; refs.muteLabel.textContent = video.muted ? "关" : "开"; }); refs.fullscreenButton.addEventListener("click", () => { (refs.videoFrame.requestFullscreen || refs.videoFrame.webkitRequestFullscreen)?.call(refs.videoFrame); });
-    volumeCanvas.addEventListener("pointerdown", (e) => { state.drag = { x: e.clientX, y: e.clientY, yaw: state.yaw, pitch: state.pitch }; volumeCanvas.classList.add("dragging"); volumeCanvas.setPointerCapture(e.pointerId); }); volumeCanvas.addEventListener("pointermove", (e) => { if (!state.drag) return; state.yaw = state.drag.yaw + (e.clientX - state.drag.x) * .008; state.pitch = clamp(state.drag.pitch + (e.clientY - state.drag.y) * .008, -1.2, 1.2); }); ["pointerup", "pointercancel"].forEach((n) => volumeCanvas.addEventListener(n, (e) => { state.drag = null; volumeCanvas.classList.remove("dragging"); try { volumeCanvas.releasePointerCapture(e.pointerId); } catch {} })); volumeCanvas.addEventListener("wheel", (e) => { e.preventDefault(); state.distance = clamp(state.distance + e.deltaY * .003, 2.5, 7); }, { passive: false });
-    refs.helpButton.addEventListener("click", () => { refs.helpModal.classList.add("open"); refs.helpModal.setAttribute("aria-hidden", "false"); }); [refs.closeHelp, refs.closeHelpCta].forEach((b) => b.addEventListener("click", () => { refs.helpModal.classList.remove("open"); refs.helpModal.setAttribute("aria-hidden", "true"); })); refs.helpModal.addEventListener("click", (e) => { if (e.target === refs.helpModal) refs.closeHelp.click(); }); window.addEventListener("resize", resizeCanvas); document.addEventListener("keydown", (e) => { if (e.target.matches("input, select, textarea")) return; if (e.code === "Space") { e.preventDefault(); togglePlay(); } if (e.key.toLowerCase() === "r") { e.preventDefault(); state.detection === "scanning" ? cancelDetection() : runDetection(); } if (e.key === "ArrowLeft") video.currentTime = clamp(video.currentTime - 10, 0, video.duration || 0); if (e.key === "ArrowRight") video.currentTime = clamp(video.currentTime + 10, 0, video.duration || 0); });
+    volumeCanvas.tabIndex = 0;
+    volumeCanvas.setAttribute("aria-label", "4D 时间体视图，可用鼠标旋转或 WASD 导航");
+    volumeCanvas.addEventListener("pointerdown", (e) => { state.navigationActive = true; volumeCanvas.focus({ preventScroll: true }); state.drag = { x: e.clientX, y: e.clientY, yaw: state.yaw, pitch: state.pitch }; volumeCanvas.classList.add("dragging"); volumeCanvas.setPointerCapture(e.pointerId); }); volumeCanvas.addEventListener("pointermove", (e) => { if (!state.drag) return; state.yaw = state.drag.yaw + (e.clientX - state.drag.x) * .008; state.pitch = clamp(state.drag.pitch + (e.clientY - state.drag.y) * .008, -1.2, 1.2); }); ["pointerup", "pointercancel"].forEach((n) => volumeCanvas.addEventListener(n, (e) => { state.drag = null; volumeCanvas.classList.remove("dragging"); try { volumeCanvas.releasePointerCapture(e.pointerId); } catch {} })); volumeCanvas.addEventListener("wheel", (e) => { e.preventDefault(); state.navigationActive = true; volumeCanvas.focus({ preventScroll: true }); state.distance = clamp(state.distance + e.deltaY * .003, 2.5, 7); }, { passive: false });
+    refs.helpButton.addEventListener("click", () => { refs.helpModal.classList.add("open"); refs.helpModal.setAttribute("aria-hidden", "false"); }); [refs.closeHelp, refs.closeHelpCta].forEach((b) => b.addEventListener("click", () => { refs.helpModal.classList.remove("open"); refs.helpModal.setAttribute("aria-hidden", "true"); })); refs.helpModal.addEventListener("click", (e) => { if (e.target === refs.helpModal) refs.closeHelp.click(); }); window.addEventListener("resize", resizeCanvas);
+    const navigationCodes = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "Space"]);
+    document.addEventListener("keydown", (e) => {
+      if (e.target.matches("input, select, textarea")) return;
+      if (navigationCodes.has(e.code)) {
+        e.preventDefault();
+        state.navigationActive = true;
+        state.keys.add(e.code);
+        return;
+      }
+      if (e.key.toLowerCase() === "p") { e.preventDefault(); togglePlay(); }
+      if (e.key.toLowerCase() === "r") { e.preventDefault(); state.detection === "scanning" ? cancelDetection() : runDetection(); }
+      if (e.key === "ArrowLeft") video.currentTime = clamp(video.currentTime - 10, 0, video.duration || 0); if (e.key === "ArrowRight") video.currentTime = clamp(video.currentTime + 10, 0, video.duration || 0);
+    });
+    document.addEventListener("keyup", (e) => { if (navigationCodes.has(e.code)) { e.preventDefault(); state.keys.delete(e.code); } });
+    window.addEventListener("blur", () => state.keys.clear());
   }
   async function init() {
-    clock(); setInterval(clock, 1000); updateLabels();
+    clock(); setInterval(clock, 1000); if (refs.resolutionSelect) state.processingPreset = Number(refs.resolutionSelect.value) >= 1080 ? 1080 : 720; updateLabels();
     video.volume = Number(refs.volumeSlider.value); video.loop = true;
     if (gl) initGL(); events(); resizeCanvas();
     // A local reference is optional; published packages start ready for upload.
