@@ -1,18 +1,10 @@
-# 二创与分支发布
+# 参与 xy+t 二创
 
-xyt 是公开的 GitHub Template Repository。你可以选择以下任一方式开始自己的版本：
+> **项目状态：长期停更**。这是一个可自由使用和修改的公开模板仓库。
 
-1. 点击仓库首页的 **Use this template**，创建一个独立的新仓库。
-2. Fork 本仓库，在自己的分支上修改，再通过 Pull Request 提交通用修复。
+你可以直接点击 GitHub 的 **Use this template** 创建自己的仓库，也可以 Fork 后建立自己的分支和版本。欢迎个人玩家修复 bug、调整视觉效果或制作二创作品；请在自己的 README 中说明改动，并保留 MIT 许可证与原设计参考署名 [@bradleytangonan](https://www.instagram.com/bradleytangonan/)。
 
-发布二创版本时，建议在 README 中保留以下来源说明：
+上游仓库：<https://github.com/XxHuberrr/xyt-paused>  
+产品名称：**xy+t**
 
-> Based on [XxHuberrr/xyt](https://github.com/XxHuberrr/xyt), product name **xy+t**.
-
-建议使用清晰的分支名，例如：
-
-- `feature/your-idea`
-- `fix/issue-name`
-- `remix/your-project`
-
-请只发布你有权使用的素材，并在二创版本中说明素材来源。
+项目目前没有固定维护周期。提交 Issue 或 Pull Request 前，请先确认问题能在最新代码中复现，并附上浏览器、操作系统、视频分辨率和采样帧率等信息。
