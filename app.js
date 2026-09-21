@@ -28,7 +28,11 @@
     abort: null, texture: null, aspect: 1, objectUrl: null, loaded: false,
     detection: "idle", detectionTimer: null, sampleTimer: null, samples: [], lastSample: null,
     detectionStartedAt: 0, wasPlayingBeforeDetection: false, lastToast: null, drag: null,
-    programs: null, quadBuffer: null, boxBuffer: null, boxIndexBuffer: null, timelineBuffer: null, lastRender: performance.now(), raf: 0,
+    programs: null, quadBuffer: null, boxBuffer: null, boxIndexBuffer: null, timelineBuffer: null,
+    // The background is a deterministic, camera-relative star field. It is
+    // regenerated only when the camera crosses a world cell, so navigation
+    // can continue indefinitely without allocating a second scene graph.
+    starBuffer: null, starData: null, starCell: null, lastRender: performance.now(), raf: 0,
     volumeBuildSeq: 0,
     sourceExtension: "MP4", isReference: true, buildId: 0,
   };
@@ -122,11 +126,68 @@
     const currentF = `#version 300 es\nprecision highp float;precision highp sampler2DArray;uniform sampler2DArray uFrames;uniform vec3 uTint;uniform int uLayer;in vec2 vUV;out vec4 outColor;void main(){vec4 f=texture(uFrames,vec3(vUV,float(uLayer)));float edge=min(min(vUV.x,1.-vUV.x),min(vUV.y,1.-vUV.y));float feather=smoothstep(0.,.075,edge);vec3 bright=min(vec3(1.),f.rgb*1.16+vec3(.018));outColor=vec4(mix(bright,uTint,.08),feather*.42);}`;
     const lineV = `#version 300 es\nlayout(location=0) in vec3 aPos;uniform mat4 uMvp;void main(){gl_Position=uMvp*vec4(aPos,1.);}`;
     const lineF = `#version 300 es\nprecision highp float;uniform vec4 uColor;uniform float uGlow;out vec4 outColor;void main(){float pulse=.82+.18*uGlow;outColor=vec4(min(vec3(1.),uColor.rgb*(.92+.08*uGlow)),uColor.a*pulse);}`;
-    try { state.programs = { slices: program(sliceV, sliceF), current: program(currentV, currentF), lines: program(lineV, lineF) }; } catch (e) { console.error(e); toast("时间切片着色器初始化失败"); return; }
-    state.gpuMaxSlices = Math.max(2, gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) || state.maxSlices); state.maxSlices = Math.min(state.maxSlices, state.gpuMaxSlices); state.sliceCount = Math.min(state.sliceCount, state.maxSlices); refs.densitySlider.min = "1"; refs.densitySlider.max = "50"; refs.densitySlider.value = String(state.sampleFps); updateLabels(); state.quadBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, state.quadBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,0,0,1,-1,1,0,1,1,1,1,-1,-1,0,0,1,1,1,1,-1,1,0,1]), gl.STATIC_DRAW); state.boxBuffer = gl.createBuffer(); state.boxIndexBuffer = gl.createBuffer(); state.timelineBuffer = gl.createBuffer(); boxGeometry(); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); render();
+    // A tiny point sprite gives the empty volume a sense of depth and keeps
+    // the world readable after the camera has travelled far from the origin.
+    // Star positions are supplied in world space by updateStars().
+    const starV = `#version 300 es\nlayout(location=0) in vec3 aPos;layout(location=1) in float aSize;uniform mat4 uMvp;uniform float uPulse;out float vAlpha;void main(){vec4 clip=uMvp*vec4(aPos,1.);gl_Position=clip;gl_PointSize=clamp(aSize*(1.0+uPulse*.22)*(180.0/max(.5,clip.w)),1.0,8.0);vAlpha=clamp(1.0-clip.w*.004,.18,1.0);}`;
+    const starF = `#version 300 es\nprecision highp float;uniform vec3 uTint;in float vAlpha;out vec4 outColor;void main(){vec2 p=gl_PointCoord-.5;float d=length(p);float glow=smoothstep(.5,0.,d);outColor=vec4(mix(uTint,vec3(1.),.72),glow*glow*.30*vAlpha);}`;
+    try { state.programs = { slices: program(sliceV, sliceF), current: program(currentV, currentF), lines: program(lineV, lineF), stars: program(starV, starF) }; } catch (e) { console.error(e); toast("时间切片着色器初始化失败"); return; }
+    state.gpuMaxSlices = Math.max(2, gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) || state.maxSlices); state.maxSlices = Math.min(state.maxSlices, state.gpuMaxSlices); state.sliceCount = Math.min(state.sliceCount, state.maxSlices); refs.densitySlider.min = "1"; refs.densitySlider.max = "50"; refs.densitySlider.value = String(state.sampleFps); updateLabels(); state.quadBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, state.quadBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,0,0,1,-1,1,0,1,1,1,1,-1,-1,0,0,1,1,1,1,-1,1,0,1]), gl.STATIC_DRAW); state.boxBuffer = gl.createBuffer(); state.boxIndexBuffer = gl.createBuffer(); state.timelineBuffer = gl.createBuffer(); state.starBuffer = gl.createBuffer(); boxGeometry(); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); render();
   }
   function boxGeometry() { if (!gl || !state.boxBuffer) return; const w = state.aspect * 1.06, h = 1.06, d = state.depth / 2; const p = [[-w,-h,-d],[w,-h,-d],[w,h,-d],[-w,h,-d],[-w,-h,d],[w,-h,d],[w,h,d],[-w,h,d]]; /* Leave the lower outline and lower side rails open so the time volume does not acquire a second underline. */ const e = [1,2,2,3,3,0,5,6,6,7,7,4,2,6,3,7]; gl.bindBuffer(gl.ARRAY_BUFFER, state.boxBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(p.flat()), gl.STATIC_DRAW); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, state.boxIndexBuffer); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(e), gl.STATIC_DRAW); }
   function resizeCanvas() { const r = refs.videoFrame.getBoundingClientRect(); const d = Math.min(devicePixelRatio || 1, 2); const w = Math.floor(r.width * d), h = Math.floor(r.height * d); if (volumeCanvas.width !== w || volumeCanvas.height !== h) { volumeCanvas.width = w; volumeCanvas.height = h; if (gl) gl.viewport(0, 0, w, h); } volumeCanvas.style.width = `${r.width}px`; volumeCanvas.style.height = `${r.height}px`; }
+
+  // Populate a camera-relative neighbourhood of a deterministic world. The
+  // camera coordinates themselves are never clamped; moving into the next
+  // cell simply streams the next set of points into this small buffer. This
+  // keeps the scene numerically stable while making the navigable space feel
+  // endless in every direction.
+  function updateStars() {
+    if (!gl || !state.starBuffer) return;
+    const cellSize = 12;
+    const cx = Math.floor(state.cameraX / cellSize);
+    const cy = Math.floor(state.cameraY / cellSize);
+    const cz = Math.floor(state.cameraZ / cellSize);
+    if (state.starCell && state.starCell[0] === cx && state.starCell[1] === cy && state.starCell[2] === cz) return;
+    const fract = (n) => n - Math.floor(n);
+    const hash = (x, y, z, k) => fract(Math.sin(x * 127.1 + y * 311.7 + z * 74.7 + k * 19.19) * 43758.5453);
+    const stars = [];
+    for (let ix = -3; ix <= 3; ix++) for (let iy = -3; iy <= 3; iy++) for (let iz = -3; iz <= 3; iz++) {
+      const wx = cx + ix, wy = cy + iy, wz = cz + iz;
+      // Two points per cell are enough for a soft, sparse deep-space field.
+      for (let k = 0; k < 2; k++) {
+        const x = (wx + .12 + hash(wx, wy, wz, k * 3 + 1) * .76) * cellSize;
+        const y = (wy + .12 + hash(wx, wy, wz, k * 3 + 2) * .76) * cellSize;
+        const z = (wz + .12 + hash(wx, wy, wz, k * 3 + 3) * .76) * cellSize;
+        const size = .55 + hash(wx, wy, wz, k * 3 + 4) * 1.45;
+        stars.push(x, y, z, size);
+      }
+    }
+    state.starCell = [cx, cy, cz];
+    state.starData = new Float32Array(stars);
+    gl.bindBuffer(gl.ARRAY_BUFFER, state.starBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, state.starData, gl.DYNAMIC_DRAW);
+  }
+  function drawStars(mvp) {
+    updateStars();
+    if (!state.starData?.length || !state.programs?.stars) return;
+    const p = state.programs.stars;
+    gl.useProgram(p);
+    gl.bindBuffer(gl.ARRAY_BUFFER, state.starBuffer);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 16, 12);
+    gl.uniformMatrix4fv(gl.getUniformLocation(p, "uMvp"), false, mvp);
+    gl.uniform1f(gl.getUniformLocation(p, "uPulse"), state.sprintBlend);
+    const tint = rgb(state.color);
+    gl.uniform3fv(gl.getUniformLocation(p, "uTint"), tint);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    gl.disable(gl.DEPTH_TEST);
+    gl.drawArrays(gl.POINTS, 0, state.starData.length / 4);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  }
   function drawSegments(p, data, color, mode = gl.LINES) {
     if (!data.length || !state.timelineBuffer) return;
     gl.bindBuffer(gl.ARRAY_BUFFER, state.timelineBuffer);
@@ -247,12 +308,15 @@
       state.cameraVY += (ty - state.cameraVY) * response;
       state.cameraVZ += (tz - state.cameraVZ) * response;
       const seconds = Math.min(0.08, dt / 1000);
-      state.cameraX = clamp(state.cameraX + state.cameraVX * seconds, -8, 8);
-      state.cameraY = clamp(state.cameraY + state.cameraVY * seconds, -6, 6);
-      // Keep the camera in front of the volume. The far bound is generous so
-      // W/S still feels like free movement, while avoiding near-plane clipping
-      // through the stack when holding W for a long time.
-      state.cameraZ = clamp(state.cameraZ + state.cameraVZ * seconds, -state.distance + 1.25, 12);
+      // Do not clamp the world coordinates. The old finite bounds made a long
+      // W/A/S/D hold silently stop at an invisible wall. Coordinates are kept
+      // as JS doubles and the star field is streamed around the current cell,
+      // so the navigator can travel indefinitely and still retain visual
+      // references in deep space. The near plane is handled by the projection
+      // matrix rather than by limiting the user's position.
+      state.cameraX += state.cameraVX * seconds;
+      state.cameraY += state.cameraVY * seconds;
+      state.cameraZ += state.cameraVZ * seconds;
       const targetBlend = sprinting ? 1 : 0;
       const blendResponse = 1 - Math.exp(-Math.min(120, dt) * .010);
       state.sprintBlend += (targetBlend - state.sprintBlend) * blendResponse;
@@ -272,6 +336,10 @@
       gl.clearColor(.025, .035, .05, 1);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       const tint = rgb(state.color);
+      // Draw the streamed deep-space field first. It is intentionally camera
+      // relative and additive, so there is no horizon or enclosing wall as
+      // the user travels through the temporal volume.
+      drawStars(mvp);
       const volumeVisible = state.texture && state.volumeReady && state.showVolume && ["all", "stack", "rail"].includes(state.mode);
       if (volumeVisible) {
         const p = state.programs.slices;
@@ -476,7 +544,7 @@
     document.querySelectorAll(".mode-tab").forEach((tab) => tab.addEventListener("click", () => { document.querySelectorAll(".mode-tab").forEach((x) => x.classList.remove("active")); tab.classList.add("active"); state.mode = tab.dataset.mode; state.showVolume = ["all", "stack", "rail"].includes(state.mode); state.showBox = ["all", "box", "rail"].includes(state.mode); refs.overlayToggle.checked = state.showVolume; updateMode(); })); refs.timeline.addEventListener("input", () => { video.currentTime = Number(refs.timeline.value); updateTime(); }); refs.backButton.addEventListener("click", () => { video.currentTime = clamp(video.currentTime - 10, 0, video.duration || 0); }); refs.forwardButton.addEventListener("click", () => { video.currentTime = clamp(video.currentTime + 10, 0, video.duration || 0); }); refs.runDetectionButton.addEventListener("click", () => state.detection === "scanning" ? cancelDetection() : runDetection()); video.addEventListener("loadedmetadata", metadata); video.addEventListener("timeupdate", updateTime); video.addEventListener("play", updatePlayback); video.addEventListener("pause", updatePlayback); refs.muteButton.addEventListener("click", () => { video.muted = !video.muted; refs.muteLabel.textContent = video.muted ? "关" : "开"; }); refs.fullscreenButton.addEventListener("click", () => { (refs.videoFrame.requestFullscreen || refs.videoFrame.webkitRequestFullscreen)?.call(refs.videoFrame); });
     volumeCanvas.tabIndex = 0;
     volumeCanvas.setAttribute("aria-label", "4D 时间体视图，可用鼠标旋转或 WASD 导航");
-    volumeCanvas.addEventListener("pointerdown", (e) => { state.navigationActive = true; volumeCanvas.focus({ preventScroll: true }); state.drag = { x: e.clientX, y: e.clientY, yaw: state.yaw, pitch: state.pitch }; volumeCanvas.classList.add("dragging"); volumeCanvas.setPointerCapture(e.pointerId); }); volumeCanvas.addEventListener("pointermove", (e) => { if (!state.drag) return; state.yaw = state.drag.yaw + (e.clientX - state.drag.x) * .008; state.pitch = clamp(state.drag.pitch + (e.clientY - state.drag.y) * .008, -1.2, 1.2); }); ["pointerup", "pointercancel"].forEach((n) => volumeCanvas.addEventListener(n, (e) => { state.drag = null; volumeCanvas.classList.remove("dragging"); try { volumeCanvas.releasePointerCapture(e.pointerId); } catch {} })); volumeCanvas.addEventListener("wheel", (e) => { e.preventDefault(); state.navigationActive = true; volumeCanvas.focus({ preventScroll: true }); state.distance = clamp(state.distance + e.deltaY * .003, 2.5, 7); }, { passive: false });
+    volumeCanvas.addEventListener("pointerdown", (e) => { state.navigationActive = true; volumeCanvas.focus({ preventScroll: true }); state.drag = { x: e.clientX, y: e.clientY, yaw: state.yaw, pitch: state.pitch }; volumeCanvas.classList.add("dragging"); volumeCanvas.setPointerCapture(e.pointerId); }); volumeCanvas.addEventListener("pointermove", (e) => { if (!state.drag) return; state.yaw = state.drag.yaw + (e.clientX - state.drag.x) * .008; state.pitch = clamp(state.drag.pitch + (e.clientY - state.drag.y) * .008, -1.2, 1.2); }); ["pointerup", "pointercancel"].forEach((n) => volumeCanvas.addEventListener(n, (e) => { state.drag = null; volumeCanvas.classList.remove("dragging"); try { volumeCanvas.releasePointerCapture(e.pointerId); } catch {} })); volumeCanvas.addEventListener("wheel", (e) => { e.preventDefault(); state.navigationActive = true; volumeCanvas.focus({ preventScroll: true }); state.distance = Math.max(.7, state.distance + e.deltaY * .003); }, { passive: false });
     refs.helpButton.addEventListener("click", () => { refs.helpModal.classList.add("open"); refs.helpModal.setAttribute("aria-hidden", "false"); }); [refs.closeHelp, refs.closeHelpCta].forEach((b) => b.addEventListener("click", () => { refs.helpModal.classList.remove("open"); refs.helpModal.setAttribute("aria-hidden", "true"); })); refs.helpModal.addEventListener("click", (e) => { if (e.target === refs.helpModal) refs.closeHelp.click(); }); window.addEventListener("resize", resizeCanvas);
     const navigationCodes = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "Space"]);
     document.addEventListener("keydown", (e) => {
