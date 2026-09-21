@@ -12,8 +12,8 @@
         <div class="brand-lockup">
           <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
           <div>
-            <div class="eyebrow">LOCAL MOTION STUDY / 004</div>
-            <h1>四维播放器</h1>
+            <div class="eyebrow">PROJECT STATUS / LONG-TERM PAUSED</div>
+            <h1>xy+t <span class="status-label">长期停更</span></h1>
           </div>
         </div>
         <div class="topbar-meta">
@@ -27,7 +27,8 @@
         <aside class="sidebar panel">
           <section class="panel-section intro-section">
             <div class="section-kicker"><span>01</span> SOURCE</div>
-            <p class="intro-copy">把参考片变成一块可观测的时间材质。所有处理都在浏览器本地完成。</p>
+            <p class="intro-copy">把视频变成一块可观测的时间材质。项目目前因个人原因长期停更，欢迎玩家自由创作、修改 bug，享受我们的音乐。</p>
+            <div class="pause-notice" role="note"><strong>长期停更</strong><span>个人玩家可自由 Fork / Template 二创。希望大家玩得开心，也希望世界和平。</span></div>
             <div class="dropzone" id="dropzone" tabindex="0">
               <input id="fileInput" type="file" accept="video/*" hidden />
               <div class="drop-icon" aria-hidden="true">↥</div>
@@ -45,7 +46,7 @@
             <div class="section-kicker"><span>02</span> PLAYBACK</div>
             <div class="control-line">
               <button class="round-button" id="playButton" type="button" aria-label="播放"><span class="play-glyph">▶</span></button>
-              <div class="control-copy"><span id="playLabel">准备播放</span><small id="playHint">SPACE 播放 / 暂停</small></div>
+              <div class="control-copy"><span id="playLabel">准备播放</span><small id="playHint">P 播放 / 暂停 · SPACE 上升</small></div>
               <label class="switch-label"><input id="loopToggle" type="checkbox" checked /><span class="switch"></span><span>LOOP</span></label>
             </div>
             <div class="slider-row">
@@ -76,8 +77,8 @@
             </div>
             <div class="slider-row color-row">
               <label for="colorPicker">色彩</label>
-              <input id="colorPicker" class="color-picker" type="color" value="#8ff8e8" />
-              <span class="mono slider-value" id="colorValue">#8FF8E8</span>
+              <input id="colorPicker" class="color-picker" type="color" value="#ffffff" />
+              <span class="mono slider-value" id="colorValue">#FFFFFF</span>
             </div>
             <div class="slider-row">
               <label for="opacitySlider">切片 α</label>
@@ -88,6 +89,14 @@
               <label for="densitySlider">采样帧率</label>
               <input id="densitySlider" type="range" min="1" max="50" value="20" step="1" />
               <span class="mono slider-value" id="densityValue">20 FPS</span>
+            </div>
+            <div class="slider-row">
+              <label for="resolutionSelect">处理分辨率</label>
+              <select id="resolutionSelect" class="select-control" aria-label="视频处理分辨率">
+                <option value="720" selected>720p · 流畅</option>
+                <option value="1080">1080p · 清晰</option>
+              </select>
+              <span class="mono slider-value" id="resolutionValue">720p</span>
             </div>
             <label class="check-row"><input id="overlayToggle" type="checkbox" checked /><span class="fake-check"></span><span>显示时间体</span></label>
           </section>
@@ -117,7 +126,7 @@
               <div class="empty-state" id="emptyState">
                 <div class="empty-orbit"><span></span><span></span><span></span></div>
                 <div class="empty-title">等待一段运动</div>
-                <div class="empty-subtitle">拖入参考视频，开始建立你的时间坐标</div>
+                <div class="empty-subtitle">拖入视频，选择 720p / 1080p，开始建立时间坐标</div>
               </div>
               <div class="scan-overlay" id="scanOverlay" aria-hidden="true">
                 <div class="scan-topline"><span>FRAME INTEGRITY</span><span class="mono" id="scanPercent">00%</span></div>
@@ -149,9 +158,9 @@
           </section>
           <section class="panel-section inspector-section note-section">
             <div class="section-kicker"><span>NOTE</span> READING THE LAYER</div>
-            <p>每一层 XY 平面来自视频在不同时间的真实帧；沿 Z 轴的距离就是时间。时间体默认保持静止，拖拽画布旋转，切片不会写回原视频。</p>
-            <div class="note-line"><span class="note-key">A</span><span>上传新视频后，所有检测设置会保留。</span></div>
-            <div class="note-line"><span class="note-key">B</span><span>检测期间可随时取消，不会生成重复动画。</span></div>
+            <p>每一层 XY 平面来自视频在不同时间的处理帧；沿 Z 轴的距离就是时间。拖拽旋转，WASD 平移，Space 上升，Ctrl 下降，Shift 冲刺。</p>
+            <div class="note-line"><span class="note-key">A</span><span>导入只写入 720p / 1080p 处理画布，不把原始分辨率直接放进时间体。</span></div>
+            <div class="note-line"><span class="note-key">B</span><span>P 播放；检测期间可随时取消，不会生成重复动画。</span></div>
           </section>
           <div class="inspector-footer"><span>xy+t · @bradleytangonan</span><span class="mono">MIT / TIME SLICES</span></div>
         </aside>
@@ -159,7 +168,7 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"><span class="toast-dot"></span><span id="toastText">已载入</span></div>
-    <div class="help-modal" id="helpModal" aria-hidden="true"><div class="help-card"><button class="modal-close" id="closeHelp" type="button">×</button><div class="section-kicker"><span>QUICK GUIDE</span> LOCAL WORKFLOW</div><h3>从视频到信号</h3><p>把参考视频拖入左侧区域，播放器会立即读取本地文件。先建立时间切片体，再拖拽画布观察 Z 轴时间结构；点击「运行检测」可看到 5 秒取样动画与真实帧差分指标。</p><div class="help-shortcuts"><div><kbd>Space</kbd><span>播放 / 暂停</span></div><div><kbd>R</kbd><span>运行检测</span></div><div><kbd>←</kbd><span>后退 10 秒</span></div><div><kbd>→</kbd><span>前进 10 秒</span></div></div><button class="primary-button" id="closeHelpCta" type="button">开始使用 <span>↗</span></button></div></div>
+    <div class="help-modal" id="helpModal" aria-hidden="true"><div class="help-card"><button class="modal-close" id="closeHelp" type="button">×</button><div class="section-kicker"><span>QUICK GUIDE</span> LOCAL WORKFLOW</div><h3>从视频到信号</h3><p>右侧控制台统一管理视频、处理分辨率、采样密度和检测。画布支持鼠标旋转与 WASD 空间导航；P 播放，Space 上升，Ctrl 下降，Shift 冲刺。</p><div class="help-shortcuts"><div><kbd>P</kbd><span>播放 / 暂停</span></div><div><kbd>R</kbd><span>运行检测</span></div><div><kbd>WASD</kbd><span>空间移动</span></div><div><kbd>Shift</kbd><span>广角冲刺</span></div></div><button class="primary-button" id="closeHelpCta" type="button">开始使用 <span>↗</span></button></div></div>
     <canvas id="sampleCanvas" width="128" height="72" hidden></canvas>
     <script src="app.js"></script>
   </body>
