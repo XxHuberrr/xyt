@@ -1,6 +1,6 @@
 {
   "name": "xyt",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "xy+t — a browser-based 4D video slice player (长期停更)",
   "main": "electron-main.cjs",
   "author": "xy+t contributors; original visual reference @bradleytangonan",
