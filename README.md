@@ -49,7 +49,7 @@ npm run dist:win   # Windows: dist/*Setup.exe, dist/*portable.exe
 | 文件 | 作用 |
 | --- | --- |
 | `index.html` | 页面结构与交互文案 |
-| `styles.css` | 深色实验室视觉和响应式布局 |
+| `styles.css` | 黑白极简控制台、四维舞台和响应式布局 |
 | `app.js` | WebGL2 时间切片体、播放、上传替换和帧检测 |
 | `reference.mp4` | 可选的本地参考视频，不随公开版本发布 |
 | `server.py` | Python 标准库静态服务器 |
