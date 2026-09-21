@@ -12,8 +12,8 @@
         <div class="brand-lockup">
           <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
           <div>
-            <div class="eyebrow">PROJECT STATUS / LONG-TERM PAUSED</div>
-            <h1>xy+t <span class="status-label">长期停更</span></h1>
+            <div class="eyebrow">PROJECT STATUS / OPEN CREATIVE TOOL</div>
+            <h1>xy+t</h1>
           </div>
         </div>
         <div class="topbar-meta">
@@ -24,11 +24,46 @@
       </header>
 
       <main class="workspace">
+        <section class="stage-column">
+          <div class="stage-header">
+            <div>
+              <div class="section-kicker"><span>LIVE</span> REFERENCE STAGE</div>
+              <div class="stage-title-row"><h2>视觉采样台</h2><span class="live-pill"><i></i> SYNCED</span></div>
+            </div>
+            <div class="stage-actions"><button id="muteButton" class="ghost-button" type="button">声音 <span id="muteLabel">开</span></button><button id="fullscreenButton" class="ghost-button" type="button">全屏 ↗</button></div>
+          </div>
+
+          <div class="stage" id="stage">
+            <div class="stage-grid-bg"></div>
+            <div class="video-frame" id="videoFrame">
+              <video id="video" playsinline preload="metadata" loop></video>
+              <canvas id="volumeCanvas" aria-label="视频时间切片三维视图"></canvas>
+              <div class="empty-state" id="emptyState">
+                <div class="empty-orbit"><span></span><span></span><span></span></div>
+                <div class="empty-title">等待一段运动</div>
+                <div class="empty-subtitle">拖入视频，选择 720p / 1080p，开始建立时间坐标</div>
+              </div>
+              <div class="scan-overlay" id="scanOverlay" aria-hidden="true">
+                <div class="scan-topline"><span>FRAME INTEGRITY</span><span class="mono" id="scanPercent">00%</span></div>
+                <div class="scan-progress"><span id="scanProgressBar"></span></div>
+                <div class="scan-center-label" id="scanCenterLabel">CALIBRATING MOTION</div>
+              </div>
+              <div class="frame-corner corner-tl"></div><div class="frame-corner corner-tr"></div><div class="frame-corner corner-bl"></div><div class="frame-corner corner-br"></div>
+            </div>
+            <div class="stage-readout"><span><i class="readout-dot"></i> TIME VOLUME</span><span class="mono" id="stageTimecode">00:00:00:00</span><span class="readout-spacer"></span><span class="mono space-readout" title="无边界世界坐标">∞ WORLD</span><span class="mono" id="stageResolution">— × —</span><span id="stageMode">ALL / XY + Z</span></div>
+          </div>
+
+          <div class="timeline-panel">
+            <div class="timeline-meta"><span class="mono" id="currentTime">00:00</span><div class="timeline-wrap"><input id="timeline" type="range" min="0" max="100" value="0" step="0.01" /><div class="timeline-markers"><span></span><span></span><span></span><span></span><span></span></div></div><span class="mono" id="durationTime">00:00</span></div>
+            <div class="timeline-controls"><div class="transport-group"><button id="backButton" class="transport-button" type="button">↶ <span>10</span></button><button id="timelinePlayButton" class="transport-button main-transport" type="button">▶</button><button id="forwardButton" class="transport-button" type="button"><span>10</span> ↷</button></div><div class="timeline-caption"><span id="timelineStatus">READY TO SAMPLE</span><span class="mono">LOCAL / NO UPLOAD</span></div></div>
+          </div>
+        </section>
+
+        <div class="control-dock" aria-label="控制台">
         <aside class="sidebar panel">
           <section class="panel-section intro-section">
             <div class="section-kicker"><span>01</span> SOURCE</div>
-            <p class="intro-copy">把视频变成一块可观测的时间材质。项目目前因个人原因长期停更，欢迎玩家自由创作、修改 bug，享受我们的音乐。</p>
-            <div class="pause-notice" role="note"><strong>长期停更</strong><span>个人玩家可自由 Fork / Template 二创。希望大家玩得开心，也希望世界和平。</span></div>
+            <p class="intro-copy">把视频变成一块可观测的时间材质。欢迎玩家自由创作、修改 bug，并分享自己的四维时间体作品。</p>
             <div class="dropzone" id="dropzone" tabindex="0">
               <input id="fileInput" type="file" accept="video/*" hidden />
               <div class="drop-icon" aria-hidden="true">↥</div>
@@ -109,41 +144,6 @@
           </section>
         </aside>
 
-        <section class="stage-column">
-          <div class="stage-header">
-            <div>
-              <div class="section-kicker"><span>LIVE</span> REFERENCE STAGE</div>
-              <div class="stage-title-row"><h2>视觉采样台</h2><span class="live-pill"><i></i> SYNCED</span></div>
-            </div>
-            <div class="stage-actions"><button id="muteButton" class="ghost-button" type="button">声音 <span id="muteLabel">开</span></button><button id="fullscreenButton" class="ghost-button" type="button">全屏 ↗</button></div>
-          </div>
-
-          <div class="stage" id="stage">
-            <div class="stage-grid-bg"></div>
-            <div class="video-frame" id="videoFrame">
-              <video id="video" playsinline preload="metadata" loop></video>
-              <canvas id="volumeCanvas" aria-label="视频时间切片三维视图"></canvas>
-              <div class="empty-state" id="emptyState">
-                <div class="empty-orbit"><span></span><span></span><span></span></div>
-                <div class="empty-title">等待一段运动</div>
-                <div class="empty-subtitle">拖入视频，选择 720p / 1080p，开始建立时间坐标</div>
-              </div>
-              <div class="scan-overlay" id="scanOverlay" aria-hidden="true">
-                <div class="scan-topline"><span>FRAME INTEGRITY</span><span class="mono" id="scanPercent">00%</span></div>
-                <div class="scan-progress"><span id="scanProgressBar"></span></div>
-                <div class="scan-center-label" id="scanCenterLabel">CALIBRATING MOTION</div>
-              </div>
-              <div class="frame-corner corner-tl"></div><div class="frame-corner corner-tr"></div><div class="frame-corner corner-bl"></div><div class="frame-corner corner-br"></div>
-            </div>
-            <div class="stage-readout"><span><i class="readout-dot"></i> TIME VOLUME</span><span class="mono" id="stageTimecode">00:00:00:00</span><span class="readout-spacer"></span><span class="mono" id="stageResolution">— × —</span><span id="stageMode">ALL / XY + Z</span></div>
-          </div>
-
-          <div class="timeline-panel">
-            <div class="timeline-meta"><span class="mono" id="currentTime">00:00</span><div class="timeline-wrap"><input id="timeline" type="range" min="0" max="100" value="0" step="0.01" /><div class="timeline-markers"><span></span><span></span><span></span><span></span><span></span></div></div><span class="mono" id="durationTime">00:00</span></div>
-            <div class="timeline-controls"><div class="transport-group"><button id="backButton" class="transport-button" type="button">↶ <span>10</span></button><button id="timelinePlayButton" class="transport-button main-transport" type="button">▶</button><button id="forwardButton" class="transport-button" type="button"><span>10</span> ↷</button></div><div class="timeline-caption"><span id="timelineStatus">READY TO SAMPLE</span><span class="mono">LOCAL / NO UPLOAD</span></div></div>
-          </div>
-        </section>
-
         <aside class="inspector panel">
           <section class="panel-section inspector-section">
             <div class="section-kicker"><span>INFO</span> SIGNAL PROFILE</div>
@@ -158,17 +158,18 @@
           </section>
           <section class="panel-section inspector-section note-section">
             <div class="section-kicker"><span>NOTE</span> READING THE LAYER</div>
-            <p>每一层 XY 平面来自视频在不同时间的处理帧；沿 Z 轴的距离就是时间。拖拽旋转，WASD 平移，Space 上升，Ctrl 下降，Shift 冲刺。</p>
+            <p>每一层 XY 平面来自视频在不同时间的处理帧；沿 Z 轴的距离就是时间。拖拽旋转，WASD 在无边界的四维空间中移动，Space 上升，Ctrl 下降，Shift 冲刺。</p>
             <div class="note-line"><span class="note-key">A</span><span>导入只写入 720p / 1080p 处理画布，不把原始分辨率直接放进时间体。</span></div>
             <div class="note-line"><span class="note-key">B</span><span>P 播放；检测期间可随时取消，不会生成重复动画。</span></div>
           </section>
           <div class="inspector-footer"><span>xy+t · @bradleytangonan</span><span class="mono">MIT / TIME SLICES</span></div>
         </aside>
+        </div>
       </main>
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"><span class="toast-dot"></span><span id="toastText">已载入</span></div>
-    <div class="help-modal" id="helpModal" aria-hidden="true"><div class="help-card"><button class="modal-close" id="closeHelp" type="button">×</button><div class="section-kicker"><span>QUICK GUIDE</span> LOCAL WORKFLOW</div><h3>从视频到信号</h3><p>右侧控制台统一管理视频、处理分辨率、采样密度和检测。画布支持鼠标旋转与 WASD 空间导航；P 播放，Space 上升，Ctrl 下降，Shift 冲刺。</p><div class="help-shortcuts"><div><kbd>P</kbd><span>播放 / 暂停</span></div><div><kbd>R</kbd><span>运行检测</span></div><div><kbd>WASD</kbd><span>空间移动</span></div><div><kbd>Shift</kbd><span>广角冲刺</span></div></div><button class="primary-button" id="closeHelpCta" type="button">开始使用 <span>↗</span></button></div></div>
+    <div class="help-modal" id="helpModal" aria-hidden="true"><div class="help-card"><button class="modal-close" id="closeHelp" type="button">×</button><div class="section-kicker"><span>QUICK GUIDE</span> LOCAL WORKFLOW</div><h3>从视频到信号</h3><p>右侧控制台统一管理视频、处理分辨率、采样密度和检测。画布支持鼠标旋转与 WASD 无限空间导航；时间体只是四维世界中的一块时间切片，P 播放，Space 上升，Ctrl 下降，Shift 冲刺。</p><div class="help-shortcuts"><div><kbd>P</kbd><span>播放 / 暂停</span></div><div><kbd>R</kbd><span>运行检测</span></div><div><kbd>WASD</kbd><span>无限空间移动</span></div><div><kbd>Shift</kbd><span>广角冲刺</span></div></div><button class="primary-button" id="closeHelpCta" type="button">开始使用 <span>↗</span></button></div></div>
     <canvas id="sampleCanvas" width="128" height="72" hidden></canvas>
     <script src="app.js"></script>
   </body>
